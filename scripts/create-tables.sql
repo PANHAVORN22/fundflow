@@ -117,3 +117,29 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+ 
+-- Photo contest entries table (for upload page)
+CREATE TABLE IF NOT EXISTS public.photo_entries (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT,
+  email TEXT,
+  purpose TEXT,
+  amounts TEXT,
+  description TEXT,
+  photo_url TEXT, -- Changed to TEXT to handle base64 images
+  photo_path TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.photo_entries ENABLE ROW LEVEL SECURITY;
+
+-- Policies: public can insert entries; anyone can view entries (optional)
+DROP POLICY IF EXISTS "Anyone can insert photo entries" ON public.photo_entries;
+DROP POLICY IF EXISTS "Anyone can view photo entries" ON public.photo_entries;
+
+CREATE POLICY "Anyone can insert photo entries" ON public.photo_entries
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Anyone can view photo entries" ON public.photo_entries
+  FOR SELECT USING (true);

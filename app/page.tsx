@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-
 const sampleCampaigns = [
   {
     id: 1,
@@ -32,7 +31,8 @@ const sampleCampaigns = [
     description:
       "Supporting Khmer communities affected by recent tragedies with essential aid and resources.",
     amountRaised: "120343",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUIXOVMoqvx_sSnpwrcJ3eh5061YFCpQ9q0M_lD_f6JB6TL1oVoffy5SRwybJQlJUB-8o&usqp=CAU?height=300&width=400",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUIXOVMoqvx_sSnpwrcJ3eh5061YFCpQ9q0M_lD_f6JB6TL1oVoffy5SRwybJQlJUB-8o&usqp=CAU?height=300&width=400",
     progress: 50,
   },
   {
@@ -42,7 +42,8 @@ const sampleCampaigns = [
     description:
       "Standing together to provide immediate relief and long-term support for affected families.",
     amountRaised: "12033",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTEGPNyGbVTCAMdHmIqHOwtVkCkLDi8LUFuOQ&s?height=300&width=400",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTEGPNyGbVTCAMdHmIqHOwtVkCkLDi8LUFuOQ&s?height=300&width=400",
     progress: 80,
   },
   {
@@ -52,7 +53,8 @@ const sampleCampaigns = [
     description:
       "Providing critical emergency aid including food, shelter, and medical assistance.",
     amountRaised: "120113",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcThL7-fHXJF9_nSExf-WsGwUeL92GtIHi9_sQ&s?height=300&width=400",
+    imageUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcThL7-fHXJF9_nSExf-WsGwUeL92GtIHi9_sQ&s?height=300&width=400",
     progress: 60,
   },
   {
@@ -62,7 +64,8 @@ const sampleCampaigns = [
     description:
       "Comprehensive support program providing essential needs for displaced families.",
     amountRaised: "1203",
-    imageUrl: "https://www.google.com/url?sa=i&url=https%3A%2F%2Fenglish.alarabiya.net%2FNews%2Fworld%2F2025%2F07%2F26%2Fdeath-toll-rises-in-thai-cambodian-clashes-despite-ceasefire-call&psig=AOvVaw1Gs24OZJBQjDBdf3hF5FzS&ust=1754729959310000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCMDq7Yrt-o4DFQAAAAAdAAAAABAp?height=300&width=400",
+    imageUrl:
+      "https://www.google.com/url?sa=i&url=https%3A%2F%2Fenglish.alarabiya.net%2FNews%2Fworld%2F2025%2F07%2F26%2Fdeath-toll-rises-in-thai-cambodian-clashes-despite-ceasefire-call&psig=AOvVaw1Gs24OZJBQjDBdf3hF5FzS&ust=1754729959310000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCMDq7Yrt-o4DFQAAAAAdAAAAABAp?height=300&width=400",
     progress: 65,
   },
 ];
@@ -73,6 +76,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("Trending");
   const router = useRouter();
+  const [entries, setEntries] = useState<any[]>([]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -101,6 +105,18 @@ export default function HomePage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Load uploaded photo entries to show on the homepage
+  useEffect(() => {
+    const loadEntries = async () => {
+      const { data } = await supabase
+        .from("photo_entries")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setEntries(data ?? []);
+    };
+    loadEntries();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -114,7 +130,6 @@ export default function HomePage() {
     const path = `/${filter.toLowerCase()}`;
     router.push(path);
   }
-    
 
   return (
     <div className="min-h-screen bg-white">
@@ -181,19 +196,41 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Campaign Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {sampleCampaigns.map((campaign) => (
-            <CampaignCard
-              key={campaign.id}
-              title={campaign.title}
-              description={campaign.description}
-              amountRaised={campaign.amountRaised}
-              imageUrl={campaign.imageUrl}
-              featured={campaign.featured}
-              progress={campaign.progress}
-            />
-          ))}
+        {/* Campaign Grid with Horizontal Scrolling */}
+        <div className="w-full">
+          <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
+            {/* Show uploaded entries only */}
+            {entries.map((e) => (
+              <div key={e.id} className="w-80 flex-shrink-0 first:ml-0">
+                <CampaignCard
+                  id={e.id}
+                  title={
+                    e.purpose ||
+                    `${(e.first_name || "").trim()} ${(
+                      e.last_name || ""
+                    ).trim()}`.trim() ||
+                    "Photo entry"
+                  }
+                  description={e.description || "Uploaded photo entry"}
+                  amountRaised={`${e.amounts || "0"}`}
+                  imageUrl={e.photo_url || "/placeholder.svg"}
+                  progress={Math.floor(Math.random() * 100) + 1}
+                />
+              </div>
+            ))}
+
+            {/* Show message if no entries yet */}
+            {entries.length === 0 && (
+              <div className="w-full text-center py-12">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  No photo entries yet
+                </h3>
+                <p className="text-gray-600">
+                  Be the first to upload a photo entry!
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
