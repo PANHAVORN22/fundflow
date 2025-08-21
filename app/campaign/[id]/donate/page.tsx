@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronRight, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 
 export default function DonatePage() {
   const params = useParams();
   const router = useRouter();
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState<string>("");
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -33,13 +34,30 @@ export default function DonatePage() {
     try {
       // For demo purposes we'll insert a donation with minimal fields
       const donationDate = new Date().toISOString();
+  // parse amount to number here so the input can accept free-form typing
+  const parsedAmount = parseFloat((amount || "").toString()) || 0;
+
+      // block non-positive donations
+      if (parsedAmount <= 0) {
+        alert("Please enter a positive amount to donate.");
+        setLoading(false);
+        return;
+      }
+
+      // block non-positive donations
+      if (parsedAmount <= 0) {
+        alert("Please enter a positive amount to donate.");
+        setLoading(false);
+        return;
+      }
+
       const { data: donationData, error: donationError } = await supabase
         .from("donations")
         .insert([
           {
             user_id: userId,
             campaign_title: `campaign:${params.id}`,
-            amount: amount || 0,
+    amount: parsedAmount,
             currency: "USD",
             donation_date: donationDate,
           },
@@ -51,6 +69,15 @@ export default function DonatePage() {
 
       // Insert comment if provided
       if (comment.trim()) {
+        const trimmed = comment.trim();
+        // If the comment is just a positive number (e.g. "100" or "3.14"), block it
+        const numericOnly = /^\s*\d+(?:\.\d+)?\s*$/.test(trimmed);
+        if (numericOnly && parseFloat(trimmed) > 0) {
+          alert("Please enter a text comment — numeric-only positive comments are not allowed.");
+          setLoading(false);
+          return;
+        }
+
         const { error: commentError } = await supabase
           .from("donation_comments")
           .insert([
@@ -58,7 +85,7 @@ export default function DonatePage() {
               campaign_id: params.id,
               donation_id: donationData.id,
               user_id: userId,
-              message: comment.trim(),
+              message: trimmed,
             },
           ]);
 
@@ -90,8 +117,8 @@ export default function DonatePage() {
             <div className="space-y-4">
               <button className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center">
-                    ABA
+                  <div className="w-30 h-10 text-white rounded-full flex items-center justify-center">
+                    <Image src="/aba.png" alt="ABA" width={100} height={100} />
                   </div>
                   <div className="text-left">
                     <div className="font-semibold">ABA KHQR</div>
@@ -105,13 +132,16 @@ export default function DonatePage() {
 
               <button className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-black text-white rounded-full flex items-center justify-center">
-                    CC
+                  <div className="w-30 h-10 text-white rounded-full flex items-center justify-center">
+                    <Image src="/credit.png" alt="credit-card" width={50} height={50} />
                   </div>
                   <div className="text-left">
                     <div className="font-semibold">Credit/Debit Card</div>
-                    <div className="text-sm text-gray-500">
-                      Visa, MasterCard, JCB
+                    <div className="text-sm text-gray-500 flex items-center gap-2 whitespace-nowrap">
+                      <Image src="/visa-svgrepo-com.svg" alt="Visa" width={25} height={25} className="inline-block" />
+                      <Image src="/images/mastercard-svgrepo-com.svg" alt="MasterCard" width={25} height={25} className="inline-block" />
+                      <Image src="/images/unionpay-svgrepo-com.svg" alt="unionpay" width={25} height={25} className="inline-block" />
+                      <Image src="/images/jcb-svgrepo-com.svg" alt="jcb" width={25} height={25} className="inline-block" />
                     </div>
                   </div>
                 </div>
@@ -136,8 +166,14 @@ export default function DonatePage() {
               <label className="text-sm text-gray-600">Amounts</label>
               <Input
                 type="number"
+                inputMode="decimal"
                 value={amount}
-                onChange={(e: any) => setAmount(Number(e.target.value))}
+                onChange={(e: any) => {
+                  const v = (e.target as HTMLInputElement).value;
+                  // Prevent entering negative values (leading '-')
+                  if (v.startsWith("-")) return;
+                  setAmount(v);
+                }}
                 placeholder="Amounts"
                 className="mt-2"
               />
@@ -153,15 +189,7 @@ export default function DonatePage() {
               />
             </div>
 
-            <div className="mt-4">
-              <Button
-                className="w-full bg-[#2f8a2f] hover:bg-[#267826]"
-                onClick={handleDonate}
-                disabled={loading}
-              >
-                {loading ? "Processing..." : "Donate"}
-              </Button>
-            </div>
+            
           </div>
         </div>
       </div>

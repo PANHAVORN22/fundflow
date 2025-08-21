@@ -3,6 +3,19 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  // If caller passed a `value` but didn't provide `onChange`, React will
+  // warn that the input is read-only. To avoid that warning while keeping
+  // the passed value as the initial value, convert `value` -> `defaultValue`
+  // when no `onChange` handler is present.
+  const incoming: any = props;
+  let finalProps: any = props;
+
+  if (incoming && incoming.hasOwnProperty("value") && !incoming.onChange) {
+    // move value to defaultValue and remove value to make the input uncontrolled
+    const { value, ...rest } = incoming;
+    finalProps = { defaultValue: value, ...rest };
+  }
+
   return (
     <input
       type={type}
@@ -13,7 +26,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         className
       )}
-      {...props}
+      {...finalProps}
     />
   )
 }

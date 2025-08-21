@@ -55,7 +55,7 @@ export default function PhotoContestPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                Photo Contest Entry
+                Upload Your Details
               </h1>
               <p className="text-gray-500 text-sm mt-1">
                 Share your creativity with us
