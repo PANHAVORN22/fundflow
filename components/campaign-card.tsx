@@ -35,11 +35,7 @@ export default function CampaignCard({
       }`}
       onClick={handleClick}
     >
-      <div
-        className={`relative bg-gray-100 ${
-          featured ? "aspect-[2/2]" : "aspect-video"
-        }`}
-      >
+      <div className="relative bg-gray-100 h-40">
         <Image
           src={imageUrl || "/placeholder.svg"}
           alt={title}
