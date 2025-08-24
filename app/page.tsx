@@ -201,7 +201,7 @@ export default function HomePage() {
           <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
             {/* Show uploaded entries only */}
             {entries.map((e) => (
-              <div key={e.id} className="w-80 flex-shrink-0 first:ml-0">
+              <div key={e.id} className="w-80 flex-shrink-0 first:ml-0 h-[420px]">
                 <CampaignCard
                   id={e.id}
                   title={
