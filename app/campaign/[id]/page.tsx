@@ -104,12 +104,76 @@ export default function CampaignDetailPage() {
           lifetime: daysAgo === 0 ? "today" : `${daysAgo} days ago`,
         });
 
-        // Keep placeholder donations for now
-        setDonations([
-          { id: "1", name: "Pichsovan Chintey", amount: "100", type: "recent" },
-          { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
-          { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
-        ]);
+        // Load donations for this campaign and map to recent/top/first slots
+        try {
+          const { data: donationRows } = await supabase
+            .from("donations")
+            .select("*")
+            .eq("campaign_title", `campaign:${params.id}`)
+            .order("donation_date", { ascending: true });
+
+          if (donationRows && (donationRows as any).length > 0) {
+            const rows = donationRows as any[];
+
+            // Resolve profile names for the user_ids in one query
+            const userIds = Array.from(
+              new Set(rows.map((r) => r.user_id).filter(Boolean))
+            );
+            const profilesMap = new Map<string, string>();
+            if (userIds.length) {
+              const { data: profiles } = await supabase
+                .from("profiles")
+                .select("id, first_name, last_name")
+                .in("id", userIds as string[]);
+
+              (profiles || []).forEach((p: any) => {
+                const name = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+                profilesMap.set(p.id, name || "Anonymous");
+              });
+            }
+
+            // pick first (earliest), recent (latest), and top (max amount)
+            const firstRow = rows[0];
+            const recentRow = rows[rows.length - 1];
+            const topRow = rows.reduce((best, cur) => {
+              const bestAmt = parseFloat(best.amount ?? 0);
+              const curAmt = parseFloat(cur.amount ?? 0);
+              return curAmt > bestAmt ? cur : best;
+            }, rows[0]);
+
+            const result: Donation[] = [];
+            const pushed = new Set<string>();
+            const pushIf = (row: any, type: Donation["type"]) => {
+              if (!row) return;
+              const id = String(row.id);
+              if (pushed.has(id)) return;
+              pushed.add(id);
+              const name = profilesMap.get(row.user_id) || row.user_id || "Anonymous";
+              result.push({ id, name, amount: String(row.amount ?? "0"), type });
+            };
+
+            // Order: recent, top, first (keeps UI similar to previous ordering)
+            pushIf(recentRow, "recent");
+            pushIf(topRow, "top");
+            pushIf(firstRow, "first");
+
+            setDonations(result);
+          } else {
+            // fallback to placeholder donations if none in DB
+            setDonations([
+              { id: "1", name: "Pichsovan Chintey", amount: "100", type: "recent" },
+              { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
+              { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
+            ]);
+          }
+        } catch (err) {
+          console.error("Error loading donations:", err);
+          setDonations([
+            { id: "1", name: "Pichsovan Chintey", amount: "100", type: "recent" },
+            { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
+            { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
+          ]);
+        }
 
         // Load comments for this campaign
         const { data: commentRows } = await supabase

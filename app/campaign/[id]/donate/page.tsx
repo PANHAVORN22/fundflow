@@ -27,15 +27,20 @@ export default function DonatePage() {
     getSession();
   }, []);
 
-  const handleDonate = async () => {
+  const startPayment = async (method: "aba" | "card") => {
     if (!params?.id) return;
     setLoading(true);
 
     try {
-      // For demo purposes we'll insert a donation with minimal fields
-      const donationDate = new Date().toISOString();
-  // parse amount to number here so the input can accept free-form typing
-  const parsedAmount = parseFloat((amount || "").toString()) || 0;
+      // Require auth (RLS on donations requires user_id = auth.uid())
+      if (!userId) {
+        alert("Please sign in to donate.");
+        router.push("/auth");
+        return;
+      }
+
+      // parse amount to number here so the input can accept free-form typing
+      const parsedAmount = parseFloat((amount || "").toString()) || 0;
 
       // block non-positive donations
       if (parsedAmount <= 0) {
@@ -43,60 +48,50 @@ export default function DonatePage() {
         setLoading(false);
         return;
       }
-
-      // block non-positive donations
-      if (parsedAmount <= 0) {
-        alert("Please enter a positive amount to donate.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: donationData, error: donationError } = await supabase
-        .from("donations")
-        .insert([
-          {
-            user_id: userId,
-            campaign_title: `campaign:${params.id}`,
-    amount: parsedAmount,
-            currency: "USD",
-            donation_date: donationDate,
-          },
-        ])
-        .select()
-        .single();
-
-      if (donationError) throw donationError;
-
-      // Insert comment if provided
+      // Optional: basic comment sanity check (avoid numeric-only positives)
       if (comment.trim()) {
         const trimmed = comment.trim();
-        // If the comment is just a positive number (e.g. "100" or "3.14"), block it
         const numericOnly = /^\s*\d+(?:\.\d+)?\s*$/.test(trimmed);
         if (numericOnly && parseFloat(trimmed) > 0) {
-          alert("Please enter a text comment — numeric-only positive comments are not allowed.");
+          alert(
+            "Please enter a text comment — numeric-only positive comments are not allowed."
+          );
           setLoading(false);
           return;
         }
-
-        const { error: commentError } = await supabase
-          .from("donation_comments")
-          .insert([
-            {
-              campaign_id: params.id,
-              donation_id: donationData.id,
-              user_id: userId,
-              message: trimmed,
-            },
-          ]);
-
-        if (commentError) throw commentError;
       }
 
-      // Redirect back to campaign detail
-      router.push(`/campaign/${params.id}`);
-    } catch (err) {
+      // Create payment session and redirect to gateway
+      const resp = await fetch("/api/payway/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: String(params.id),
+          userId,
+          amount: parsedAmount,
+          comment: comment.trim() || undefined,
+          method,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(
+          err?.error || `Failed to create payment: ${resp.status}`
+        );
+      }
+
+      const data = await resp.json();
+      if (data?.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
+      throw new Error("Missing redirect url from gateway");
+    } catch (err: any) {
       console.error("Donation error:", err);
-      alert("Donation failed. Check console for details.");
+      const message =
+        err?.message || (typeof err === "string" ? err : "Unknown error");
+      alert(`Donation failed: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -115,7 +110,11 @@ export default function DonatePage() {
             <h3 className="text-2xl font-bold mb-6">Choose way to pay</h3>
 
             <div className="space-y-4">
-              <button className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm">
+              <button
+                disabled={loading}
+                onClick={() => startPayment("aba")}
+                className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-30 h-10 text-white rounded-full flex items-center justify-center">
                     <Image src="/aba.png" alt="ABA" width={100} height={100} />
@@ -130,18 +129,51 @@ export default function DonatePage() {
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
 
-              <button className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm">
+              <button
+                disabled={loading}
+                onClick={() => startPayment("card")}
+                className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-30 h-10 text-white rounded-full flex items-center justify-center">
-                    <Image src="/credit.png" alt="credit-card" width={50} height={50} />
+                    <Image
+                      src="/credit.png"
+                      alt="credit-card"
+                      width={50}
+                      height={50}
+                    />
                   </div>
                   <div className="text-left">
                     <div className="font-semibold">Credit/Debit Card</div>
                     <div className="text-sm text-gray-500 flex items-center gap-2 whitespace-nowrap">
-                      <Image src="/visa-svgrepo-com.svg" alt="Visa" width={25} height={25} className="inline-block" />
-                      <Image src="/images/mastercard-svgrepo-com.svg" alt="MasterCard" width={25} height={25} className="inline-block" />
-                      <Image src="/images/unionpay-svgrepo-com.svg" alt="unionpay" width={25} height={25} className="inline-block" />
-                      <Image src="/images/jcb-svgrepo-com.svg" alt="jcb" width={25} height={25} className="inline-block" />
+                      <Image
+                        src="/visa-svgrepo-com.svg"
+                        alt="Visa"
+                        width={25}
+                        height={25}
+                        className="inline-block"
+                      />
+                      <Image
+                        src="/images/mastercard-svgrepo-com.svg"
+                        alt="MasterCard"
+                        width={25}
+                        height={25}
+                        className="inline-block"
+                      />
+                      <Image
+                        src="/images/unionpay-svgrepo-com.svg"
+                        alt="unionpay"
+                        width={25}
+                        height={25}
+                        className="inline-block"
+                      />
+                      <Image
+                        src="/images/jcb-svgrepo-com.svg"
+                        alt="jcb"
+                        width={25}
+                        height={25}
+                        className="inline-block"
+                      />
                     </div>
                   </div>
                 </div>
@@ -188,8 +220,6 @@ export default function DonatePage() {
                 className="mt-2 h-40"
               />
             </div>
-
-            
           </div>
         </div>
       </div>

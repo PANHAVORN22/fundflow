@@ -74,7 +74,7 @@ export default function PhotoContestPage() {
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Full Name with enhanced styling */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
               Full Name
             </label>
@@ -104,7 +104,7 @@ export default function PhotoContestPage() {
 
           {/* Email with enhanced styling */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
               E-mail
             </label>
@@ -119,7 +119,7 @@ export default function PhotoContestPage() {
 
           {/* Upload Photo with enhanced design */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <div className="w-2 h-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"></div>
               Upload Photo
             </label>
@@ -159,7 +159,7 @@ export default function PhotoContestPage() {
           {/* Purpose and Amounts Row with enhanced styling */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <div className="w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"></div>
                 Purpose
               </label>
@@ -171,7 +171,7 @@ export default function PhotoContestPage() {
               />
             </div>
             <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <div className="w-2 h-2 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full"></div>
                 Amounts
               </label>
@@ -186,7 +186,7 @@ export default function PhotoContestPage() {
 
           {/* Description with enhanced styling */}
           <div className="space-y-3">
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <div className="w-2 h-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"></div>
               Description
             </label>
@@ -205,7 +205,7 @@ export default function PhotoContestPage() {
               className="w-full h-14 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
             >
               <Sparkles className="h-5 w-5 mr-2" />
-              Submit Entry
+              Submit
             </Button>
           </div>
         </form>
