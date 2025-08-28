@@ -301,6 +301,7 @@ export default function CampaignDetailPage() {
             )}
 
             {/* Campaign Description */}
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Description</h3>
             <div className="prose max-w-none">
               <p className="text-gray-700 leading-relaxed">
                 {campaign.description}
