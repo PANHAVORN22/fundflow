@@ -423,58 +423,73 @@ export default function CampaignDetailPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Words of support (3)</h2>
-                <Button variant="outline" size="sm">
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Please donate to share words of support
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$1000 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      I'm so sorry this happened to you. Nobody deserves this
-                      type of treatment, I'm happy that you will at least have
-                      some financial assistance while you heal.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$500 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      Stay strong! We're all here to support you through this
-                      difficult time.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$750 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      Sending love and support your way. You'll get through
-                      this!
-                    </p>
-                  </div>
+                <h2 className="text-xl font-semibold">
+                  Words of support ({comments.length})
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/campaign/${params.id}/donate`)}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Please donate to share words of support
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!params?.id) return;
+                      if (!confirm("Delete all comments for this campaign?")) return;
+                      try {
+                        const res = await fetch("/api/comments/clear", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ campaignId: String(params.id) }),
+                        });
+                        if (!res.ok) {
+                          const j = await res.json().catch(() => ({}));
+                          throw new Error(j?.error || `Failed: ${res.status}`);
+                        }
+                        // reload comments
+                        const { data: commentRows } = await supabase
+                          .from("donation_comments")
+                          .select("*")
+                          .eq("campaign_id", params.id as string)
+                          .order("created_at", { ascending: false });
+                        setComments((commentRows as any) ?? []);
+                      } catch (e: any) {
+                        alert(e?.message || "Failed to clear comments");
+                      }
+                    }}
+                  >
+                    Clear all
+                  </Button>
                 </div>
               </div>
 
-              <div className="text-center mt-6">
-                <Button variant="outline">Show more</Button>
-              </div>
+              {comments.length === 0 ? (
+                <div className="text-gray-600 text-sm">No words of support yet.</div>
+              ) : (
+                <div className="space-y-4">
+                  {comments.map((c) => (
+                    <div key={c.id} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium">Supporter</span>
+                          {c.created_at && (
+                            <span className="text-xs text-gray-500">
+                              {new Date(c.created_at).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-gray-700">{c.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
