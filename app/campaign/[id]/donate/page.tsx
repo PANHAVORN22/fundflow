@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import QRCode from "qrcode";
 
 export default function DonatePage() {
   const params = useParams();
@@ -24,6 +25,7 @@ export default function DonatePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [qrUrl, setQrUrl] = useState<string>("");
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   useEffect(() => {
     const getSession = async () => {
@@ -93,7 +95,15 @@ export default function DonatePage() {
       if (data?.redirectUrl) {
         // For ABA, show QR modal so user can scan or open payment
         if (method === "aba") {
-          setQrUrl(String(data.redirectUrl));
+          const redirect = String(data.redirectUrl);
+          setQrUrl(redirect);
+          try {
+            const durl = await QRCode.toDataURL(redirect, { width: 240, margin: 1 });
+            setQrDataUrl(durl);
+          } catch (e) {
+            console.warn("Failed generating local QR, will fallback to external service", e);
+            setQrDataUrl("");
+          }
           setIsQrOpen(true);
           return;
         }
@@ -240,17 +250,28 @@ export default function DonatePage() {
       </div>
 
       {/* QR Modal for ABA payments */}
-      <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
+      <Dialog open={isQrOpen} onOpenChange={(open) => {
+        setIsQrOpen(open);
+        if (!open) {
+          setQrDataUrl("");
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Scan to Pay (KHQR)</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4">
-            {qrUrl ? (
+            {qrDataUrl ? (
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
-                  qrUrl
-                )}&size=240x240`}
+                src={qrDataUrl}
+                alt="KHQR"
+                width={240}
+                height={240}
+                className="rounded-md border"
+              />
+            ) : qrUrl ? (
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrUrl)}&size=240x240`}
                 alt="KHQR"
                 width={240}
                 height={240}
