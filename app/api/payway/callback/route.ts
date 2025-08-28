@@ -86,6 +86,23 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Update campaign total (store latest amount in photo_entries.amounts as a string sum)
+    try {
+      const { data: current } = await supabaseAdmin
+        .from("photo_entries")
+        .select("amounts")
+        .eq("id", campaignId)
+        .maybeSingle();
+      const prev = Number((current as any)?.amounts || 0) || 0;
+      const next = (prev + amount).toString();
+      await supabaseAdmin
+        .from("photo_entries")
+        .update({ amounts: next })
+        .eq("id", campaignId);
+    } catch (e) {
+      console.warn("Failed to update campaign total", e);
+    }
+
     // Redirect back to campaign page with success query
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||

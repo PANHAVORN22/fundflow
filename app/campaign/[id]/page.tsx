@@ -240,6 +240,23 @@ export default function CampaignDetailPage() {
     };
   }, [params?.id]);
 
+  // Polling fallback: refresh comments periodically if realtime is unavailable
+  useEffect(() => {
+    const campaignId = params?.id as string | undefined;
+    if (!campaignId) return;
+    const interval = setInterval(async () => {
+      try {
+        const { data: commentRows } = await supabase
+          .from("donation_comments")
+          .select("*")
+          .eq("campaign_id", campaignId)
+          .order("created_at", { ascending: false });
+        setComments((commentRows as any) ?? []);
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [params?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
