@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildCallbackUrl } from "@/lib/payway";
+import { generateAbaHmacSignature } from "@/lib/payway";
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,28 +72,61 @@ export async function POST(req: NextRequest) {
     console.log("Our callback URL:", callbackUrl);
 
     let paywayData: any;
+    const dateStr = new Date()
+      .toISOString()
+      .replace(/[-:T.Z]/g, "")
+      .slice(0, 14);
+    const randomStr = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0");
+    const tran_id = `t${dateStr}${randomStr}`.substring(0, 20);
+    function formatPaywayDate(date: Date = new Date()): string {
+      return date
+        .toISOString()
+        .replace(/[-:T.]/g, "")
+        .slice(0, 14);
+    }
+    const req_time = formatPaywayDate();
 
     try {
       // Call PayWay's purchase API to create a real payment session
       const paywayResponse = await fetch(
-        "https://api.payway.com.kh/rest/purchase",
+        "https://checkout-sandbox.payway.com.kh/api/payment-gateway/v1/payments/purchase",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.PAYWAY_API_KEY}`,
           },
           body: JSON.stringify({
-            amount: amount * 100, // PayWay expects amount in cents
+            req_time: req_time,
+            merchant_id: process.env.ABA_MERCHANT_ID,
+            tran_id: tran_id,
+            amount: amount * 100,
             currency: "USD",
-            description: `Donation to campaign: ${campaignId}`,
-            return_url: callbackUrl, // PayWay will call this after payment
+            view_type: "hosted_view",
+            return_url: callbackUrl,
             cancel_url: `${normalizedBase}/campaign/${campaignId}?cancelled=1`,
-            reference: `donation_${campaignId}_${userId}_${Date.now()}`,
+            hash: generateAbaHmacSignature(
+              {
+                req_time: req_time,
+                merchant_id: process.env.ABA_MERCHANT_ID,
+                tran_id: tran_id,
+                amount: amount * 100,
+                currency: "USD",
+                return_url: callbackUrl,
+                cancel_url: `${normalizedBase}/campaign/${campaignId}?cancelled=1`,
+              },
+              process.env.PAYWAY_API_KEY
+            ).signatureBase64,
+
             // Add any other PayWay-specific fields here
           }),
         }
       );
+
+      console.log("PayWay API request:", paywayResponse.body);
+
+      console.log("PayWay API response:", paywayResponse);
 
       if (!paywayResponse.ok) {
         const paywayError = await paywayResponse.json().catch(() => ({}));
@@ -112,8 +146,19 @@ export async function POST(req: NextRequest) {
         throw new Error("PayWay did not return a payment URL or QR code");
       }
 
+      // Generate QR code URL from payment URL
+      let qrCodeUrl = null;
+      if (paywayData.qr_code) {
+        qrCodeUrl = paywayData.qr_code;
+      } else if (paywayData.payment_url) {
+        qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+          paywayData.payment_url
+        )}`;
+      }
+
       return NextResponse.json({
         success: true,
+        qrCodeUrl,
         paymentUrl: paywayData.payment_url || paywayData.qr_code,
         paymentId: paywayData.payment_id || paywayData.id,
         isMock: false,
@@ -139,6 +184,9 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
+        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+          paywayData.payment_url
+        )}`,
         paymentUrl: paywayData.payment_url,
         paymentId: paywayData.payment_id,
         isMock: true,

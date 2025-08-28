@@ -87,17 +87,18 @@ export default function DonatePage() {
         }
 
         const data = await resp.json();
-        // Build a QR image from callbackUrl (so any scanner can hit our signed callback)
-        if (data?.callbackUrl) {
-          const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-            data.callbackUrl
-          )}`;
-          setQrUrl(qr);
+
+        if (data.success) {
+          // Set the QR code URL from the API response
+          setQrUrl(data.qrCodeUrl);
+          setGatewayUrl(data?.paymentUrl || null);
+          setPaymentMethod("aba");
         } else {
-          setQrUrl(null);
+          console.error("Failed to create payment:", data.error);
+          alert("Failed to create payment. Please try again.");
+          return;
         }
-        setGatewayUrl(data?.redirectUrl || null);
-        setPaymentMethod("aba");
+
         setShowPaymentModal(true);
         return;
       }
@@ -139,7 +140,6 @@ export default function DonatePage() {
     setQrUrl(null);
     setGatewayUrl(null);
   };
-
   const simulateSuccessfulPayment = async (amount: number) => {
     try {
       // Create donation record

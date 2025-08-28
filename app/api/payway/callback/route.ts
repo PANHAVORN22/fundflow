@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySignature } from "@/lib/payway";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
