@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronRight, ArrowLeft } from "lucide-react";
 import Image from "next/image";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function DonatePage() {
   const params = useParams();
@@ -16,6 +22,8 @@ export default function DonatePage() {
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isQrOpen, setIsQrOpen] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string>("");
 
   useEffect(() => {
     const getSession = async () => {
@@ -83,6 +91,13 @@ export default function DonatePage() {
 
       const data = await resp.json();
       if (data?.redirectUrl) {
+        // For ABA, show QR modal so user can scan or open payment
+        if (method === "aba") {
+          setQrUrl(String(data.redirectUrl));
+          setIsQrOpen(true);
+          return;
+        }
+        // For card, just redirect to gateway/mock
         window.location.href = data.redirectUrl;
         return;
       }
@@ -223,6 +238,44 @@ export default function DonatePage() {
           </div>
         </div>
       </div>
+
+      {/* QR Modal for ABA payments */}
+      <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Scan to Pay (KHQR)</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            {qrUrl ? (
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
+                  qrUrl
+                )}&size=240x240`}
+                alt="KHQR"
+                width={240}
+                height={240}
+                className="rounded-md border"
+              />
+            ) : null}
+            <div className="text-sm text-gray-600">
+              Amount: <span className="font-semibold">{amount || 0}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  if (qrUrl) window.location.href = qrUrl;
+                }}
+                className="bg-[#6B8E5A] hover:bg-[#5A7A4A]"
+              >
+                Open Payment
+              </Button>
+              <Button variant="outline" onClick={() => setIsQrOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,8 @@ export default function CampaignDetailPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [showOrganizerDetails, setShowOrganizerDetails] = useState(false);
+  const searchParams = useSearchParams();
+  const paid = searchParams?.get("paid") === "1";
 
   useEffect(() => {
     const loadCampaign = async () => {
@@ -223,6 +225,12 @@ export default function CampaignDetailPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {paid && (
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
+            <div className="font-semibold">Thank you! Your donation was successful.</div>
+            <div className="text-sm">We appreciate your support for this campaign.</div>
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Campaign Content */}
           <div className="lg:col-span-2">

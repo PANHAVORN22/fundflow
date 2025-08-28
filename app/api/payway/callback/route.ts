@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySignature } from "@/lib/payway";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET(req: NextRequest) {
   try {
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
 
     // Insert donation
     const donationDate = new Date().toISOString();
+    const supabaseAdmin = getSupabaseAdmin();
     const { data: donation, error: donationError } = await supabaseAdmin
       .from("donations")
       .insert([
