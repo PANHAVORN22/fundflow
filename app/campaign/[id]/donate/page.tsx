@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChevronRight, ArrowLeft } from "lucide-react";
 import Image from "next/image";
+import QRCode from "qrcode";
 
 export default function DonatePage() {
   const params = useParams();
@@ -16,6 +17,8 @@ export default function DonatePage() {
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string>("");
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   useEffect(() => {
     const getSession = async () => {
@@ -61,6 +64,22 @@ export default function DonatePage() {
         }
       }
 
+      // Persist pending comment locally as a fallback (in case server callback can't insert)
+      try {
+        if (comment.trim()) {
+          const key = `pending_comment_${String(params.id)}`;
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              message: comment.trim(),
+              amount: parsedAmount,
+              userId,
+              ts: Date.now(),
+            })
+          );
+        }
+      } catch {}
+
       // Create payment session and redirect to gateway
       const resp = await fetch("/api/payway/create", {
         method: "POST",
@@ -83,6 +102,20 @@ export default function DonatePage() {
 
       const data = await resp.json();
       if (data?.redirectUrl) {
+        // For ABA, show QR modal so user can scan or open payment
+        if (method === "aba") {
+          const redirect = String(data.redirectUrl);
+          setQrUrl(redirect);
+          try {
+            const durl = await QRCode.toDataURL(redirect, { width: 240, margin: 1 });
+            setQrDataUrl(durl);
+          } catch (e) {
+            console.warn("Failed generating local QR, will fallback to external service", e);
+            setQrDataUrl("");
+          }
+          return;
+        }
+        // For card, just redirect to gateway/mock
         window.location.href = data.redirectUrl;
         return;
       }
@@ -179,6 +212,47 @@ export default function DonatePage() {
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
+
+              {(qrDataUrl || qrUrl) && (
+                <div className="mt-4 p-4 rounded-lg border bg-white">
+                  <div className="font-semibold mb-2">Scan to Pay (ABA KHQR)</div>
+                  <div className="flex flex-col items-center gap-3">
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="KHQR"
+                        width={240}
+                        height={240}
+                        className="rounded-md border"
+                      />
+                    ) : qrUrl ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrUrl)}&size=240x240`}
+                        alt="KHQR"
+                        width={240}
+                        height={240}
+                        className="rounded-md border"
+                      />
+                    ) : null}
+                    <div className="text-sm text-gray-600">
+                      Amount: <span className="font-semibold">{amount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center">
+                      Open ABA Mobile and scan this QR to complete your donation.
+                    </div>
+                    {qrUrl && (
+                      <Button
+                        onClick={() => {
+                          window.location.href = qrUrl;
+                        }}
+                        className="bg-[#6B8E5A] hover:bg-[#5A7A4A]"
+                      >
+                        Open Payment
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex justify-start">
                 <Button

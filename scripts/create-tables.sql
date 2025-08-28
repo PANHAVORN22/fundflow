@@ -143,3 +143,28 @@ CREATE POLICY "Anyone can insert photo entries" ON public.photo_entries
 
 CREATE POLICY "Anyone can view photo entries" ON public.photo_entries
   FOR SELECT USING (true);
+
+-- Donation comments table (words of support)
+CREATE TABLE IF NOT EXISTS public.donation_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  donation_id UUID REFERENCES public.donations(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.donation_comments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view donation comments" ON public.donation_comments;
+DROP POLICY IF EXISTS "Users can insert own donation comments" ON public.donation_comments;
+DROP POLICY IF EXISTS "Users can delete own donation comments" ON public.donation_comments;
+
+CREATE POLICY "Anyone can view donation comments" ON public.donation_comments
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can insert own donation comments" ON public.donation_comments
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own donation comments" ON public.donation_comments
+  FOR DELETE USING (auth.uid() = user_id);

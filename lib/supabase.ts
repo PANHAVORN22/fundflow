@@ -1,20 +1,47 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let cachedClient: SupabaseClient | null = null
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables")
+function createStubClient(): SupabaseClient {
+  const noop = async () => ({ data: null, error: null }) as any
+  const stubAuth = {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+  } as any
+  return {
+    auth: stubAuth,
+    from: () => ({ select: noop, insert: noop, update: noop, delete: noop, eq: () => ({ select: noop }) } as any),
+  } as unknown as SupabaseClient
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: "pkce",
-  },
-})
+export function getSupabase(): SupabaseClient {
+  if (cachedClient) return cachedClient
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // Avoid build-time crashes; runtime without envs will be limited
+    return createStubClient()
+  }
+  cachedClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: "pkce",
+    },
+  })
+  return cachedClient
+}
+
+export const supabase = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const client = getSupabase() as any
+      return client[prop]
+    },
+  }
+) as unknown as SupabaseClient
 
 export type Database = {
   public: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,8 @@ export default function CampaignDetailPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [showOrganizerDetails, setShowOrganizerDetails] = useState(false);
+  const searchParams = useSearchParams();
+  const paid = searchParams?.get("paid") === "1";
 
   useEffect(() => {
     const loadCampaign = async () => {
@@ -63,10 +65,13 @@ export default function CampaignDetailPage() {
           .from("photo_entries")
           .select("*")
           .eq("id", params.id as string)
-          .single();
+          .maybeSingle();
 
         if (error) {
-          console.error("Error loading campaign:", error);
+          // Log only unexpected errors
+          if ((error as any)?.code !== "PGRST116") {
+            console.error("Error loading campaign:", error);
+          }
           setCampaign(null);
           setDonations([]);
           setComments([]);
@@ -191,6 +196,99 @@ export default function CampaignDetailPage() {
     loadCampaign();
   }, [params.id]);
 
+  // Fallback: if redirected with paid=1, try to write any pending local comment
+  useEffect(() => {
+    const paid = (typeof window !== 'undefined') && new URLSearchParams(window.location.search).get('paid') === '1';
+    const campaignId = params?.id as string | undefined;
+    if (!paid || !campaignId) return;
+    const key = `pending_comment_${campaignId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const pending = JSON.parse(raw || '{}');
+      const message = (pending?.message || '').trim();
+      const userId = pending?.userId;
+      if (!message || !userId) return;
+      // Insert client-side
+      (async () => {
+        const { error } = await supabase
+          .from('donation_comments')
+          .insert([{ campaign_id: campaignId, user_id: userId, message }]);
+        if (!error) {
+          localStorage.removeItem(key);
+          // Refresh comments list
+          const { data: commentRows } = await supabase
+            .from('donation_comments')
+            .select('*')
+            .eq('campaign_id', campaignId)
+            .order('created_at', { ascending: false });
+          setComments((commentRows as any) ?? []);
+        }
+      })();
+    } catch {}
+  }, [params?.id]);
+
+  // Realtime updates for donation comments on this campaign
+  useEffect(() => {
+    const campaignId = params?.id as string | undefined;
+    if (!campaignId) return;
+
+    const channel = supabase
+      .channel(`comments:${campaignId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'donation_comments',
+          filter: `campaign_id=eq.${campaignId}`,
+        } as any,
+        (payload: any) => {
+          const row = payload?.new;
+          if (!row) return;
+          setComments((prev) => [row, ...prev]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'donation_comments',
+          filter: `campaign_id=eq.${campaignId}`,
+        } as any,
+        (payload: any) => {
+          const row = payload?.old;
+          if (!row) return;
+          setComments((prev) => prev.filter((c: any) => c.id !== row.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [params?.id]);
+
+  // Polling fallback: refresh comments periodically if realtime is unavailable
+  useEffect(() => {
+    const campaignId = params?.id as string | undefined;
+    if (!campaignId) return;
+    const interval = setInterval(async () => {
+      try {
+        const { data: commentRows } = await supabase
+          .from("donation_comments")
+          .select("*")
+          .eq("campaign_id", campaignId)
+          .order("created_at", { ascending: false });
+        setComments((commentRows as any) ?? []);
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [params?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -223,6 +321,12 @@ export default function CampaignDetailPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {paid && (
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
+            <div className="font-semibold">Thank you! Your donation was successful.</div>
+            <div className="text-sm">We appreciate your support for this campaign.</div>
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Campaign Content */}
           <div className="lg:col-span-2">
@@ -290,6 +394,7 @@ export default function CampaignDetailPage() {
             )}
 
             {/* Campaign Description */}
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Description</h3>
             <div className="prose max-w-none">
               <p className="text-gray-700 leading-relaxed">
                 {campaign.description}
@@ -410,66 +515,39 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Words of Support Section */}
-        <div className="mt-12">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Words of support (3)</h2>
-                <Button variant="outline" size="sm">
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Please donate to share words of support
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$1000 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      I'm so sorry this happened to you. Nobody deserves this
-                      type of treatment, I'm happy that you will at least have
-                      some financial assistance while you heal.
-                    </p>
-                  </div>
+        {/* Words of Support Section (only show when there are comments) */}
+        {comments.length > 0 && (
+          <div className="mt-12">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold">
+                    Words of support ({comments.length})
+                  </h2>
                 </div>
 
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$500 SH</span>
+                <div className="space-y-4">
+                  {comments.map((c) => (
+                    <div key={c.id} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium">Supporter</span>
+                          {c.created_at && (
+                            <span className="text-xs text-gray-500">
+                              {new Date(c.created_at).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-gray-700">{c.message}</p>
+                      </div>
                     </div>
-                    <p className="text-gray-700">
-                      Stay strong! We're all here to support you through this
-                      difficult time.
-                    </p>
-                  </div>
+                  ))}
                 </div>
-
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$750 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      Sending love and support your way. You'll get through
-                      this!
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center mt-6">
-                <Button variant="outline">Show more</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </main>
     </div>
   );
