@@ -224,6 +224,16 @@ export default function DonatePage() {
                     <div className="text-xs text-gray-500 text-center">
                       Open ABA Mobile and scan this QR to complete your donation.
                     </div>
+                    {qrUrl && (
+                      <Button
+                        onClick={() => {
+                          window.location.href = qrUrl;
+                        }}
+                        className="bg-[#6B8E5A] hover:bg-[#5A7A4A]"
+                      >
+                        Open Payment
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
