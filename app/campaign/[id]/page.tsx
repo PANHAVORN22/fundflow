@@ -196,6 +196,50 @@ export default function CampaignDetailPage() {
     loadCampaign();
   }, [params.id]);
 
+  // Realtime updates for donation comments on this campaign
+  useEffect(() => {
+    const campaignId = params?.id as string | undefined;
+    if (!campaignId) return;
+
+    const channel = supabase
+      .channel(`comments:${campaignId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'donation_comments',
+          filter: `campaign_id=eq.${campaignId}`,
+        } as any,
+        (payload: any) => {
+          const row = payload?.new;
+          if (!row) return;
+          setComments((prev) => [row, ...prev]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'donation_comments',
+          filter: `campaign_id=eq.${campaignId}`,
+        } as any,
+        (payload: any) => {
+          const row = payload?.old;
+          if (!row) return;
+          setComments((prev) => prev.filter((c: any) => c.id !== row.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [params?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
