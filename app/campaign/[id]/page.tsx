@@ -196,6 +196,38 @@ export default function CampaignDetailPage() {
     loadCampaign();
   }, [params.id]);
 
+  // Fallback: if redirected with paid=1, try to write any pending local comment
+  useEffect(() => {
+    const paid = (typeof window !== 'undefined') && new URLSearchParams(window.location.search).get('paid') === '1';
+    const campaignId = params?.id as string | undefined;
+    if (!paid || !campaignId) return;
+    const key = `pending_comment_${campaignId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const pending = JSON.parse(raw || '{}');
+      const message = (pending?.message || '').trim();
+      const userId = pending?.userId;
+      if (!message || !userId) return;
+      // Insert client-side
+      (async () => {
+        const { error } = await supabase
+          .from('donation_comments')
+          .insert([{ campaign_id: campaignId, user_id: userId, message }]);
+        if (!error) {
+          localStorage.removeItem(key);
+          // Refresh comments list
+          const { data: commentRows } = await supabase
+            .from('donation_comments')
+            .select('*')
+            .eq('campaign_id', campaignId)
+            .order('created_at', { ascending: false });
+          setComments((commentRows as any) ?? []);
+        }
+      })();
+    } catch {}
+  }, [params?.id]);
+
   // Realtime updates for donation comments on this campaign
   useEffect(() => {
     const campaignId = params?.id as string | undefined;

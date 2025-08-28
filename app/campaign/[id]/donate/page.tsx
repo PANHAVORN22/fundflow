@@ -64,6 +64,22 @@ export default function DonatePage() {
         }
       }
 
+      // Persist pending comment locally as a fallback (in case server callback can't insert)
+      try {
+        if (comment.trim()) {
+          const key = `pending_comment_${String(params.id)}`;
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              message: comment.trim(),
+              amount: parsedAmount,
+              userId,
+              ts: Date.now(),
+            })
+          );
+        }
+      } catch {}
+
       // Create payment session and redirect to gateway
       const resp = await fetch("/api/payway/create", {
         method: "POST",
