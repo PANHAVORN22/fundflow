@@ -483,59 +483,17 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Words of Support Section */}
-        <div className="mt-12">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">
-                  Words of support ({comments.length})
-                </h2>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/campaign/${params.id}/donate`)}
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Please donate to share words of support
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!params?.id) return;
-                      if (!confirm("Delete all comments for this campaign?")) return;
-                      try {
-                        const res = await fetch("/api/comments/clear", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ campaignId: String(params.id) }),
-                        });
-                        if (!res.ok) {
-                          const j = await res.json().catch(() => ({}));
-                          throw new Error(j?.error || `Failed: ${res.status}`);
-                        }
-                        // reload comments
-                        const { data: commentRows } = await supabase
-                          .from("donation_comments")
-                          .select("*")
-                          .eq("campaign_id", params.id as string)
-                          .order("created_at", { ascending: false });
-                        setComments((commentRows as any) ?? []);
-                      } catch (e: any) {
-                        alert(e?.message || "Failed to clear comments");
-                      }
-                    }}
-                  >
-                    Clear all
-                  </Button>
+        {/* Words of Support Section (only show when there are comments) */}
+        {comments.length > 0 && (
+          <div className="mt-12">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold">
+                    Words of support ({comments.length})
+                  </h2>
                 </div>
-              </div>
 
-              {comments.length === 0 ? (
-                <div className="text-gray-600 text-sm">No words of support yet.</div>
-              ) : (
                 <div className="space-y-4">
                   {comments.map((c) => (
                     <div key={c.id} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
@@ -554,10 +512,10 @@ export default function CampaignDetailPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </main>
     </div>
   );
