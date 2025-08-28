@@ -65,10 +65,13 @@ export default function CampaignDetailPage() {
           .from("photo_entries")
           .select("*")
           .eq("id", params.id as string)
-          .single();
+          .maybeSingle();
 
         if (error) {
-          console.error("Error loading campaign:", error);
+          // Log only unexpected errors
+          if ((error as any)?.code !== "PGRST116") {
+            console.error("Error loading campaign:", error);
+          }
           setCampaign(null);
           setDonations([]);
           setComments([]);
