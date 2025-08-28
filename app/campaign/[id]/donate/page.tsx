@@ -205,6 +205,37 @@ export default function DonatePage() {
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
 
+              {(qrDataUrl || qrUrl) && (
+                <div className="mt-4 p-4 rounded-lg border bg-white">
+                  <div className="font-semibold mb-2">Scan to Pay (ABA KHQR)</div>
+                  <div className="flex flex-col items-center gap-3">
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="KHQR"
+                        width={240}
+                        height={240}
+                        className="rounded-md border"
+                      />
+                    ) : qrUrl ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrUrl)}&size=240x240`}
+                        alt="KHQR"
+                        width={240}
+                        height={240}
+                        className="rounded-md border"
+                      />
+                    ) : null}
+                    <div className="text-sm text-gray-600">
+                      Amount: <span className="font-semibold">{amount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center">
+                      Open ABA Mobile and scan this QR to complete your donation.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 flex justify-start">
                 <Button
                   variant="outline"
