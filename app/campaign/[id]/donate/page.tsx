@@ -16,6 +16,27 @@ export default function DonatePage() {
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"aba" | "card">("aba");
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
+  const [khqrSeconds, setKhqrSeconds] = useState<number>(180);
+
+  useEffect(() => {
+    if (showPaymentModal && paymentMethod === "aba") {
+      setKhqrSeconds(180);
+      const t = setInterval(() => {
+        setKhqrSeconds((s) => (s > 0 ? s - 1 : 0));
+      }, 1000);
+      return () => clearInterval(t);
+    }
+  }, [showPaymentModal, paymentMethod]);
+
+  const formatMMSS = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     const getSession = async () => {
@@ -29,71 +50,134 @@ export default function DonatePage() {
 
   const startPayment = async (method: "aba" | "card") => {
     if (!params?.id) return;
-    setLoading(true);
+
+    // Basic validation
+    if (!userId) {
+      alert("Please sign in to donate.");
+      router.push("/auth");
+      return;
+    }
+
+    const parsedAmount = parseFloat((amount || "").toString()) || 0;
+    if (parsedAmount <= 0) {
+      alert("Please enter a positive amount to donate.");
+      return;
+    }
 
     try {
-      // Require auth (RLS on donations requires user_id = auth.uid())
-      if (!userId) {
-        alert("Please sign in to donate.");
-        router.push("/auth");
-        return;
-      }
+      if (method === "aba") {
+        // Ask backend to create session and give us callback + redirect
+        const resp = await fetch("/api/payway/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId: String(params.id),
+            userId,
+            amount: parsedAmount,
+            comment: comment.trim() || undefined,
+            method: "aba",
+          }),
+        });
 
-      // parse amount to number here so the input can accept free-form typing
-      const parsedAmount = parseFloat((amount || "").toString()) || 0;
-
-      // block non-positive donations
-      if (parsedAmount <= 0) {
-        alert("Please enter a positive amount to donate.");
-        setLoading(false);
-        return;
-      }
-      // Optional: basic comment sanity check (avoid numeric-only positives)
-      if (comment.trim()) {
-        const trimmed = comment.trim();
-        const numericOnly = /^\s*\d+(?:\.\d+)?\s*$/.test(trimmed);
-        if (numericOnly && parseFloat(trimmed) > 0) {
-          alert(
-            "Please enter a text comment — numeric-only positive comments are not allowed."
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(
+            err?.error || `Failed to create payment: ${resp.status}`
           );
-          setLoading(false);
-          return;
         }
+
+        const data = await resp.json();
+        // Build a QR image from callbackUrl (so any scanner can hit our signed callback)
+        if (data?.callbackUrl) {
+          const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+            data.callbackUrl
+          )}`;
+          setQrUrl(qr);
+        } else {
+          setQrUrl(null);
+        }
+        setGatewayUrl(data?.redirectUrl || null);
+        setPaymentMethod("aba");
+        setShowPaymentModal(true);
+        return;
       }
 
-      // Create payment session and redirect to gateway
-      const resp = await fetch("/api/payway/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaignId: String(params.id),
-          userId,
-          amount: parsedAmount,
-          comment: comment.trim() || undefined,
-          method,
-        }),
+      // Card flow - open a modal before going to gateway
+      if (method === "card") {
+        const resp = await fetch("/api/payway/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId: String(params.id),
+            userId,
+            amount: parsedAmount,
+            comment: comment.trim() || undefined,
+            method: "card",
+          }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(
+            err?.error || `Failed to create payment: ${resp.status}`
+          );
+        }
+
+        const data = await resp.json();
+        setGatewayUrl(data?.redirectUrl || null);
+        setPaymentMethod("card");
+        setShowPaymentModal(true);
+        return;
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to start payment");
+    }
+  };
+
+  const closePayment = () => {
+    setShowPaymentModal(false);
+    setQrUrl(null);
+    setGatewayUrl(null);
+  };
+
+  const simulateSuccessfulPayment = async (amount: number) => {
+    try {
+      // Create donation record
+      const { error } = await supabase.from("donations").insert({
+        user_id: userId,
+        campaign_title: `campaign:${params.id}`,
+        amount,
+        currency: "USD",
+        donation_date: new Date().toISOString(),
+        campaign_image_url: null,
       });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(
-          err?.error || `Failed to create payment: ${resp.status}`
-        );
+      if (error) throw error;
+
+      // Update campaign amount
+      const { data: campaign } = await supabase
+        .from("photo_entries")
+        .select("amounts")
+        .eq("id", params.id)
+        .single();
+
+      if (campaign) {
+        const currentAmount = parseFloat(campaign.amounts || "0");
+        const newAmount = currentAmount + amount;
+
+        await supabase
+          .from("photo_entries")
+          .update({ amounts: newAmount.toString() })
+          .eq("id", params.id);
       }
 
-      const data = await resp.json();
-      if (data?.redirectUrl) {
-        window.location.href = data.redirectUrl;
-        return;
-      }
-      throw new Error("Missing redirect url from gateway");
-    } catch (err: any) {
-      console.error("Donation error:", err);
-      const message =
-        err?.message || (typeof err === "string" ? err : "Unknown error");
-      alert(`Donation failed: ${message}`);
-    } finally {
-      setLoading(false);
+      alert("Payment successful! Your donation has been recorded.");
+      router.push(`/campaign/${params.id}?paid=1`);
+    } catch (error: any) {
+      console.error("Error recording donation:", error);
+      alert(
+        "Payment processed but failed to record donation. Please contact support."
+      );
     }
   };
 
@@ -223,6 +307,146 @@ export default function DonatePage() {
           </div>
         </div>
       </div>
+      {/* Payment QR Modal (ABA) */}
+      {showPaymentModal && paymentMethod === "aba" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-0 text-center shadow-xl">
+            {/* Close */}
+            <button
+              onClick={closePayment}
+              className="absolute right-4 top-3 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+            {/* Simulated ABA KHQR card */}
+            <div className="mx-auto mt-6 mb-4 w-[300px] rounded-xl border border-gray-200 overflow-hidden text-left">
+              {/* Header */}
+              <div className="relative bg-gradient-to-b from-red-500 to-red-600 h-10 flex items-center px-3 text-white text-xs font-semibold">
+                <span className="uppercase tracking-wider">KHQR</span>
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/15 text-white text-[10px] px-2 py-0.5 rounded-full">
+                  {formatMMSS(khqrSeconds)}
+                </span>
+              </div>
+              {/* Body */}
+              <div className="bg-white px-4 pt-3 pb-4">
+                <div className="text-[11px] text-gray-500 mb-1">Amount</div>
+                <div className="text-lg font-semibold text-gray-900 mb-2">
+                  ${parseFloat((amount || "0").toString()).toFixed(2)} USD
+                </div>
+                <div className="flex items-center justify-center">
+                  {qrUrl ? (
+                    <img
+                      src={qrUrl}
+                      alt="KHQR"
+                      className="w-48 h-48 rounded-md border"
+                    />
+                  ) : (
+                    <div className="w-48 h-48 rounded-md border flex items-center justify-center text-sm text-gray-500">
+                      QR not available
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 text-[10px] text-center text-gray-500 leading-snug">
+                  Scan with Bakong App or Mobile Banking apps that support KHQR
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 pb-6">
+              <a
+                href={qrUrl || undefined}
+                download
+                className="inline-flex items-center justify-center w-full border rounded py-2 text-sm mb-2 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Download QR
+              </a>
+              <button
+                disabled={!gatewayUrl}
+                onClick={() =>
+                  gatewayUrl && (window.location.href = gatewayUrl)
+                }
+                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded"
+              >
+                Pay ${parseFloat((amount || "0").toString()).toFixed(2)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit/Debit Card Modal */}
+      {showPaymentModal && paymentMethod === "card" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Credit/Debit Card</h3>
+              <button
+                onClick={closePayment}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Card number
+                </label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="4378 9200 1600 4207"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Expiry date
+                  </label>
+                  <input
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="03/32"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    CVV
+                  </label>
+                  <input
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="***"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded p-3 text-sm mb-4">
+              <div className="flex justify-between mb-1">
+                <span className="text-gray-600">Subtotal:</span>
+                <span>
+                  ${parseFloat((amount || "0").toString()).toFixed(2)} USD
+                </span>
+              </div>
+              <div className="flex justify-between mb-1">
+                <span className="text-gray-600">Transaction fee:</span>
+                <span className="text-green-600">Free</span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span>TOTAL:</span>
+                <span>
+                  ${parseFloat((amount || "0").toString()).toFixed(2)} USD
+                </span>
+              </div>
+            </div>
+            <button
+              disabled={!gatewayUrl}
+              onClick={() => gatewayUrl && (window.location.href = gatewayUrl)}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded"
+            >
+              Pay ${parseFloat((amount || "0").toString()).toFixed(2)}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

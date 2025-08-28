@@ -14,4 +14,3 @@ export const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     detectSessionInUrl: false,
   },
 });
-

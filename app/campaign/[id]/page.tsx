@@ -49,6 +49,7 @@ export default function CampaignDetailPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [showOrganizerDetails, setShowOrganizerDetails] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
     const loadCampaign = async () => {
@@ -58,6 +59,14 @@ export default function CampaignDetailPage() {
       }
 
       try {
+        // Check for payment success query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("paid") === "1") {
+          setShowSuccessMessage(true);
+          // Hide success message after 5 seconds
+          setTimeout(() => setShowSuccessMessage(false), 5000);
+        }
+
         // Fetch campaign / photo entry
         const { data, error } = await supabase
           .from("photo_entries")
@@ -127,7 +136,9 @@ export default function CampaignDetailPage() {
                 .in("id", userIds as string[]);
 
               (profiles || []).forEach((p: any) => {
-                const name = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+                const name = `${p.first_name || ""} ${
+                  p.last_name || ""
+                }`.trim();
                 profilesMap.set(p.id, name || "Anonymous");
               });
             }
@@ -148,8 +159,14 @@ export default function CampaignDetailPage() {
               const id = String(row.id);
               if (pushed.has(id)) return;
               pushed.add(id);
-              const name = profilesMap.get(row.user_id) || row.user_id || "Anonymous";
-              result.push({ id, name, amount: String(row.amount ?? "0"), type });
+              const name =
+                profilesMap.get(row.user_id) || row.user_id || "Anonymous";
+              result.push({
+                id,
+                name,
+                amount: String(row.amount ?? "0"),
+                type,
+              });
             };
 
             // Order: recent, top, first (keeps UI similar to previous ordering)
@@ -161,7 +178,12 @@ export default function CampaignDetailPage() {
           } else {
             // fallback to placeholder donations if none in DB
             setDonations([
-              { id: "1", name: "Pichsovan Chintey", amount: "100", type: "recent" },
+              {
+                id: "1",
+                name: "Pichsovan Chintey",
+                amount: "100",
+                type: "recent",
+              },
               { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
               { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
             ]);
@@ -169,7 +191,12 @@ export default function CampaignDetailPage() {
         } catch (err) {
           console.error("Error loading donations:", err);
           setDonations([
-            { id: "1", name: "Pichsovan Chintey", amount: "100", type: "recent" },
+            {
+              id: "1",
+              name: "Pichsovan Chintey",
+              amount: "100",
+              type: "recent",
+            },
             { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
             { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
           ]);
@@ -223,6 +250,52 @@ export default function CampaignDetailPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-green-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-green-800">
+                  🎉 Thank you for your donation! Your contribution has been
+                  recorded successfully.
+                </p>
+              </div>
+              <div className="ml-auto pl-3">
+                <button
+                  onClick={() => setShowSuccessMessage(false)}
+                  className="inline-flex text-green-400 hover:text-green-600"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Campaign Content */}
           <div className="lg:col-span-2">

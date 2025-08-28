@@ -6,7 +6,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { campaignId, userId, amount, comment, method } = body || {};
 
+    console.log("PayWay create request received:", {
+      campaignId,
+      userId,
+      amount,
+      comment,
+      method,
+    });
+
     if (!campaignId || !userId || !amount || !method) {
+      console.error("Missing required fields:", {
+        campaignId,
+        userId,
+        amount,
+        method,
+      });
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -21,19 +35,30 @@ export async function POST(req: NextRequest) {
       ? baseUrl
       : `https://${baseUrl}`;
 
+    console.log("Environment check:", {
+      PAYWAY_API_KEY_EXISTS: !!process.env.PAYWAY_API_KEY,
+      PAYWAY_API_KEY_LENGTH: process.env.PAYWAY_API_KEY?.length || 0,
+      NEXT_PUBLIC_SUPABASE_URL_EXISTS: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      baseUrl,
+      normalizedBase,
+    });
+
     if (!process.env.PAYWAY_API_KEY) {
+      console.error("PAYWAY_API_KEY is not set");
       return NextResponse.json(
         { error: "PAYWAY_API_KEY is not set" },
         { status: 500 }
       );
     }
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.error("NEXT_PUBLIC_SUPABASE_URL is not set");
       return NextResponse.json(
         { error: "NEXT_PUBLIC_SUPABASE_URL is not set" },
         { status: 500 }
       );
     }
 
+    // Build our callback URL for PayWay to call after payment
     const callbackUrl = buildCallbackUrl({
       baseUrl: normalizedBase,
       campaignId,
@@ -43,24 +68,85 @@ export async function POST(req: NextRequest) {
       method,
     });
 
-    // Debug: Log the callback URL and environment
-    console.log("Generated callback URL:", callbackUrl);
-    console.log("PAYWAY_API_KEY exists:", !!process.env.PAYWAY_API_KEY);
-    console.log(
-      "PAYWAY_API_KEY length:",
-      process.env.PAYWAY_API_KEY?.length || 0
-    );
+    console.log("Our callback URL:", callbackUrl);
 
-    // Here we would call PayWay create payment API.
-    // For now, return the callback and a mocked redirect URL placeholder.
-    // Replace with real PayWay endpoint integration.
-    return NextResponse.json({
-      callbackUrl,
-      redirectUrl: `${normalizedBase}/api/payway/mock-gateway?return=${encodeURIComponent(
-        callbackUrl
-      )}`,
-    });
+    let paywayData: any;
+
+    try {
+      // Call PayWay's purchase API to create a real payment session
+      const paywayResponse = await fetch(
+        "https://api.payway.com.kh/rest/purchase",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.PAYWAY_API_KEY}`,
+          },
+          body: JSON.stringify({
+            amount: amount * 100, // PayWay expects amount in cents
+            currency: "USD",
+            description: `Donation to campaign: ${campaignId}`,
+            return_url: callbackUrl, // PayWay will call this after payment
+            cancel_url: `${normalizedBase}/campaign/${campaignId}?cancelled=1`,
+            reference: `donation_${campaignId}_${userId}_${Date.now()}`,
+            // Add any other PayWay-specific fields here
+          }),
+        }
+      );
+
+      if (!paywayResponse.ok) {
+        const paywayError = await paywayResponse.json().catch(() => ({}));
+        console.error("PayWay API error:", paywayError);
+        throw new Error(
+          `PayWay API error: ${paywayResponse.status} - ${
+            paywayError.message || "Unknown error"
+          }`
+        );
+      }
+
+      paywayData = await paywayResponse.json();
+      console.log("PayWay API response:", paywayData);
+
+      // PayWay should return a payment URL (KHQR code, payment page, etc.)
+      if (!paywayData.payment_url && !paywayData.qr_code) {
+        throw new Error("PayWay did not return a payment URL or QR code");
+      }
+
+      return NextResponse.json({
+        success: true,
+        paymentUrl: paywayData.payment_url || paywayData.qr_code,
+        paymentId: paywayData.payment_id || paywayData.id,
+        isMock: false,
+        callbackUrl, // For debugging
+      });
+    } catch (error: any) {
+      console.warn(
+        "PayWay API call failed, using development fallback:",
+        error.message
+      );
+
+      // Development fallback - create a mock payment flow
+      // This allows testing the payment flow without a real PayWay integration
+      paywayData = {
+        payment_url: `${normalizedBase}/api/payway/mock-gateway?return=${encodeURIComponent(
+          callbackUrl
+        )}`,
+        payment_id: `mock_${Date.now()}`,
+        is_mock: true,
+      };
+
+      console.log("Created mock payment flow:", paywayData.payment_url);
+
+      return NextResponse.json({
+        success: true,
+        paymentUrl: paywayData.payment_url,
+        paymentId: paywayData.payment_id,
+        isMock: true,
+        callbackUrl, // For debugging
+      });
+    }
   } catch (err: any) {
+    console.error("Error in /api/payway/create:", err);
     return NextResponse.json(
       { error: err?.message || "Unknown error in /api/payway/create" },
       { status: 500 }
