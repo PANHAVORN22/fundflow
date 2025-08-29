@@ -142,7 +142,7 @@ export default function DonatePage() {
   };
   const simulateSuccessfulPayment = async (amount: number) => {
     try {
-      // Create donation record
+      // Create donation record with comment
       const { error } = await supabase.from("donations").insert({
         user_id: userId,
         campaign_title: `campaign:${params.id}`,
@@ -150,26 +150,17 @@ export default function DonatePage() {
         currency: "USD",
         donation_date: new Date().toISOString(),
         campaign_image_url: null,
+        comment: comment.trim() || null,
+        campaign_id: params.id,
       });
 
       if (error) throw error;
 
-      // Update campaign amount
-      const { data: campaign } = await supabase
-        .from("photo_entries")
-        .select("amounts")
-        .eq("id", params.id)
-        .single();
-
-      if (campaign) {
-        const currentAmount = parseFloat(campaign.amounts || "0");
-        const newAmount = currentAmount + amount;
-
-        await supabase
-          .from("photo_entries")
-          .update({ amounts: newAmount.toString() })
-          .eq("id", params.id);
-      }
+      // DON'T update the amounts field - it's the GOAL amount and should stay fixed!
+      // The amount raised is calculated from the donations table, not stored in photo_entries
+      console.log(
+        "Campaign goal amount stays fixed - not updating amounts field"
+      );
 
       alert("Payment successful! Your donation has been recorded.");
       router.push(`/campaign/${params.id}?paid=1`);

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySignature } from "@/lib/payway";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -51,6 +50,8 @@ export async function GET(req: NextRequest) {
       currency: "USD",
       donation_date: donationDate,
       campaign_image_url: null,
+      comment: comment || "No comment",
+      hasComment: !!comment,
     });
 
     const { data: donation, error: donationError } = await supabaseAdmin
@@ -63,6 +64,8 @@ export async function GET(req: NextRequest) {
           currency: "USD",
           donation_date: donationDate,
           campaign_image_url: null,
+          comment: comment || null,
+          campaign_id: campaignId,
         },
       ])
       .select()
@@ -78,50 +81,15 @@ export async function GET(req: NextRequest) {
 
     console.log("Donation inserted successfully:", donation);
 
-    // Update campaign amount in photo_entries table
-    try {
-      const { data: campaign, error: campaignError } = await supabaseAdmin
-        .from("photo_entries")
-        .select("amounts")
-        .eq("id", campaignId)
-        .single();
+    // DON'T update the amounts field - it's the GOAL amount and should stay fixed!
+    // The amount raised is calculated from the donations table, not stored in photo_entries
+    console.log(
+      "Campaign goal amount stays fixed - not updating amounts field"
+    );
 
-      if (campaignError) {
-        console.error("Error fetching campaign:", campaignError);
-      } else {
-        // Parse current amount and add new donation
-        const currentAmount = parseFloat(campaign.amounts || "0");
-        const newAmount = currentAmount + amount;
-
-        console.log("Updating campaign amount:", {
-          currentAmount,
-          newAmount,
-          campaignId,
-        });
-
-        const { error: updateError } = await supabaseAdmin
-          .from("photo_entries")
-          .update({ amounts: newAmount.toString() })
-          .eq("id", campaignId);
-
-        if (updateError) {
-          console.error("Error updating campaign amount:", updateError);
-        } else {
-          console.log("Campaign amount updated successfully to:", newAmount);
-        }
-      }
-    } catch (error) {
-      console.error("Error in campaign update:", error);
-    }
-
-    // Insert comment if any
-    // TODO: Create donation_comments table or handle comments differently
-    // For now, we'll skip comment insertion to avoid the 500 error
+    // Comment is now saved directly in the donations table
     if (comment && comment.trim()) {
-      console.log(
-        "Comment received but skipping insertion - donation_comments table not yet created:",
-        comment.trim()
-      );
+      console.log("Comment saved with donation:", comment.trim());
     }
 
     // Redirect back to campaign page with success query

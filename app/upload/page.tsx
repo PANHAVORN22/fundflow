@@ -96,6 +96,7 @@ export default function UploadPage() {
           email: formData.email,
           purpose: formData.purpose,
           amounts: formData.amounts,
+
           description: formData.description,
           photo_url: base64Data,
           photo_path: uploadedFile.name,
@@ -267,10 +268,10 @@ export default function UploadPage() {
             <div className="space-y-3">
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <div className="w-2 h-2 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full"></div>
-                Amounts
+                Goal Amount
               </label>
               <Input
-                placeholder="Amounts"
+                placeholder="Enter your fundraising goal (e.g., 10000)"
                 value={formData.amounts}
                 onChange={(e) => handleInputChange("amounts", e.target.value)}
                 className="h-12 border-gray-200 focus:border-yellow-500 focus:ring-yellow-500/20 transition-all duration-200"

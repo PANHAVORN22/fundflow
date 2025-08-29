@@ -45,7 +45,14 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [comments, setComments] = useState<
-    { id: string; message: string; created_at?: string; user_id?: string }[]
+    {
+      id: string;
+      amount: number;
+      comment: string | null;
+      donation_date: string;
+      user_id: string;
+      profiles: { full_name: string | null; avatar_url: string | null } | null;
+    }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [showOrganizerDetails, setShowOrganizerDetails] = useState(false);
@@ -89,6 +96,56 @@ export default function CampaignDetailPage() {
           return;
         }
 
+        // Fetch real donations for this campaign (check both new and old format)
+        const { data: donationsData, error: donationsError } = await supabase
+          .from("donations")
+          .select(
+            `
+            id,
+            amount,
+            comment,
+            donation_date,
+            user_id,
+            profiles!donations_user_id_fkey (
+              full_name,
+              avatar_url
+            )
+          `
+          )
+          .or(
+            `campaign_id.eq.${params.id},campaign_title.eq.campaign:${params.id}`
+          )
+          .order("donation_date", { ascending: false });
+
+        if (donationsError) {
+          console.error("Error loading donations:", donationsError);
+        } else {
+          console.log(
+            "Donations found:",
+            donationsData?.length || 0,
+            donationsData
+          );
+
+          // Debug: Check if comments are being loaded
+          if (donationsData && donationsData.length > 0) {
+            console.log("Sample donation with comment:", {
+              id: donationsData[0].id,
+              amount: donationsData[0].amount,
+              comment: donationsData[0].comment,
+              hasComment: !!donationsData[0].comment,
+            });
+          }
+
+          // Transform the data to match our interface
+          const transformedDonations = (donationsData || []).map(
+            (donation) => ({
+              ...donation,
+              profiles: donation.profiles?.[0] || null,
+            })
+          );
+          setComments(transformedDonations);
+        }
+
         const organizerName =
           `${data.first_name || ""} ${data.last_name || ""}`.trim() ||
           "Anonymous";
@@ -100,14 +157,45 @@ export default function CampaignDetailPage() {
           Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
         );
 
+        // Calculate real amounts from donations
+        let totalAmount = 0;
+        let donationsCount = 0;
+        if (donationsData && donationsData.length > 0) {
+          totalAmount = donationsData.reduce(
+            (sum, donation) => sum + (donation.amount || 0),
+            0
+          );
+          donationsCount = donationsData.length;
+        }
+
+        console.log("Campaign calculation:", {
+          totalAmount,
+          donationsCount,
+          donationsData: donationsData?.length || 0,
+        });
+
+        // The goal amount is fixed - what the user set when creating the campaign
+        const goalAmount = parseFloat(data.amounts || "1000"); // This is the FIXED goal
+        // The amount raised comes from donations (not from the amounts field)
+        const amountRaised = totalAmount; // This is what people actually donated
+        const progressPercentage =
+          goalAmount > 0 ? Math.round((amountRaised / goalAmount) * 100) : 0;
+
+        console.log("Progress calculation:", {
+          goalAmount: `$${goalAmount.toLocaleString()} (FIXED GOAL)`,
+          amountRaised: `$${amountRaised.toLocaleString()} (FROM DONATIONS)`,
+          progressPercentage: `${progressPercentage}%`,
+          totalAmount: `$${totalAmount.toLocaleString()}`,
+        });
+
         setCampaign({
           id: data.id,
           title: data.purpose || organizerName || "Photo entry",
           description: data.description || "",
-          amountRaised: data.amounts || "0",
-          goal: "N/A",
-          donations: 0,
-          progress: 0,
+          amountRaised: amountRaised.toString(), // Use amountRaised (donations total)
+          goal: goalAmount.toLocaleString(), // Use goalAmount (fixed goal)
+          donations: donationsCount,
+          progress: progressPercentage,
           imageUrl: data.photo_url || "/placeholder.svg",
           organizer: organizerName,
           lifetime: daysAgo === 0 ? "today" : `${daysAgo} days ago`,
@@ -118,7 +206,9 @@ export default function CampaignDetailPage() {
           const { data: donationRows } = await supabase
             .from("donations")
             .select("*")
-            .eq("campaign_title", `campaign:${params.id}`)
+            .or(
+              `campaign_id.eq.${params.id},campaign_title.eq.campaign:${params.id}`
+            )
             .order("donation_date", { ascending: true });
 
           if (donationRows && (donationRows as any).length > 0) {
@@ -488,7 +578,9 @@ export default function CampaignDetailPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Words of support (3)</h2>
+                <h2 className="text-xl font-semibold">
+                  Words of support ({comments.length})
+                </h2>
                 <Button variant="outline" size="sm">
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Please donate to share words of support
@@ -496,45 +588,51 @@ export default function CampaignDetailPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$1000 SH</span>
+                {comments.length > 0 ? (
+                  comments.map((donation) => (
+                    <div
+                      key={donation.id}
+                      className="flex gap-4 p-4 bg-gray-50 rounded-lg"
+                    >
+                      <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0 flex items-center justify-center">
+                        {donation.profiles?.avatar_url ? (
+                          <Image
+                            src={donation.profiles.avatar_url}
+                            alt="User avatar"
+                            width={48}
+                            height={48}
+                            className="rounded-full"
+                          />
+                        ) : (
+                          <User className="w-6 h-6 text-gray-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium">
+                            ${donation.amount} USD
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            by {donation.profiles?.full_name || "Anonymous"}
+                          </span>
+                        </div>
+                        {donation.comment && (
+                          <p className="text-gray-700">{donation.comment}</p>
+                        )}
+                        <div className="text-xs text-gray-500 mt-2">
+                          {new Date(
+                            donation.donation_date
+                          ).toLocaleDateString()}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-gray-700">
-                      I'm so sorry this happened to you. Nobody deserves this
-                      type of treatment, I'm happy that you will at least have
-                      some financial assistance while you heal.
-                    </p>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No donations yet. Be the first to show your support!</p>
                   </div>
-                </div>
-
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$500 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      Stay strong! We're all here to support you through this
-                      difficult time.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-medium">$750 SH</span>
-                    </div>
-                    <p className="text-gray-700">
-                      Sending love and support your way. You'll get through
-                      this!
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className="text-center mt-6">

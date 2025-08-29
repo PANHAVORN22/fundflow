@@ -146,14 +146,15 @@ export async function POST(req: NextRequest) {
         throw new Error("PayWay did not return a payment URL or QR code");
       }
 
-      // Generate QR code URL from payment URL
+      // Always generate QR code from payment URL for real-life scanning
       let qrCodeUrl = null;
-      if (paywayData.qr_code) {
-        qrCodeUrl = paywayData.qr_code;
-      } else if (paywayData.payment_url) {
+      if (paywayData.payment_url) {
         qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
           paywayData.payment_url
         )}`;
+      } else if (paywayData.qr_code) {
+        // Fallback: if PayWay directly returns QR code, use it
+        qrCodeUrl = paywayData.qr_code;
       }
 
       return NextResponse.json({
