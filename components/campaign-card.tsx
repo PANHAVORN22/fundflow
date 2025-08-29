@@ -30,16 +30,12 @@ export default function CampaignCard({
 
   return (
     <Card
-      className={`overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${
+      className={`h-full flex flex-col overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${
         featured ? "md:col-span-2 md:row-span-2" : ""
       }`}
       onClick={handleClick}
     >
-      <div
-        className={`relative bg-gray-100 ${
-          featured ? "aspect-[2/2]" : "aspect-video"
-        }`}
-      >
+      <div className="relative bg-gray-100 h-40">
         <Image
           src={imageUrl || "/placeholder.svg"}
           alt={title}
@@ -47,13 +43,15 @@ export default function CampaignCard({
           className="object-cover"
         />
       </div>
-      <CardContent className="p-4">
+      <CardContent className="p-4 flex flex-col flex-1">
         <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
           {title}
         </h3>
-        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{description}</p>
-        {progress && <Progress value={progress} />}
-        <div className="font-semibold text-[#6B8E5A]">${amountRaised}</div>
+        <p className="text-sm text-gray-600 line-clamp-2">{description}</p>
+        <div className="mt-auto">
+          {progress && <Progress value={progress} />}
+          <div className="mt-2 font-semibold text-[#6B8E5A]">${amountRaised}</div>
+        </div>
       </CardContent>
     </Card>
   );
