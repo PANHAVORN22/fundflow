@@ -274,8 +274,7 @@ export default function CampaignDetailPage() {
                 amount: "100",
                 type: "recent",
               },
-              { id: "2", name: "Smos Sne", amount: "10000", type: "top" },
-              { id: "3", name: "Yun mengheng", amount: "10", type: "first" },
+              
             ]);
           }
         } catch (err) {
@@ -294,7 +293,7 @@ export default function CampaignDetailPage() {
 
         // Load comments for this campaign
         const { data: commentRows } = await supabase
-          .from("donation_comments")
+          .from("donations")
           .select("*")
           .eq("campaign_id", params.id as string)
           .order("created_at", { ascending: false });
